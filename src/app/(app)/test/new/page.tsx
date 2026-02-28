@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Zap, Smartphone, ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Globe, Zap, Smartphone, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,10 +10,53 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export default function NewTestPage() {
+  const router = useRouter();
   const [url, setUrl] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fastMode, setFastMode] = useState(false);
   const [mobileViewport, setMobileViewport] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRunTest() {
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      // Ensure URL has a protocol
+      let testUrl = url;
+      if (!/^https?:\/\//i.test(testUrl)) {
+        testUrl = `https://${testUrl}`;
+      }
+
+      const res = await fetch("/api/test-runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: testUrl,
+          mode: fastMode ? "fast" : "standard",
+          mobileViewport,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 402) {
+          setError("No credits remaining. Upgrade to continue testing.");
+        } else {
+          setError(data.error || "Something went wrong");
+        }
+        return;
+      }
+
+      router.push(`/test/${data.testRunId}`);
+    } catch {
+      setError("Failed to start test. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center justify-center pt-20">
@@ -33,17 +77,35 @@ export default function NewTestPage() {
                 placeholder="https://your-app.vercel.app"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && url && !submitting) handleRunTest();
+                }}
                 className="pl-10"
               />
             </div>
-            <Button disabled={!url} className="px-6">
-              Run Test
+            <Button
+              disabled={!url || submitting}
+              onClick={handleRunTest}
+              className="px-6"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                "Run Test"
+              )}
             </Button>
           </div>
 
+          {error && (
+            <p className="mt-3 text-sm text-destructive">{error}</p>
+          )}
+
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="mt-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="mt-4 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronDown
               className={cn(
@@ -69,7 +131,7 @@ export default function NewTestPage() {
                 Fast Mode
                 {fastMode && (
                   <Badge variant="secondary" className="ml-1 text-xs">
-                    1 run
+                    1 credit
                   </Badge>
                 )}
               </button>
@@ -92,7 +154,7 @@ export default function NewTestPage() {
       </Card>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        QAi tests your live site — no code access or framework knowledge needed
+        Standard mode costs 2 credits. Fast mode costs 1 credit.
       </p>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -36,6 +37,14 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const [credits, setCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/credits")
+      .then((res) => res.json())
+      .then((data) => setCredits(data.balance))
+      .catch(() => {});
+  }, [pathname]); // Refetch when navigating
 
   return (
     <Sidebar>
@@ -78,7 +87,9 @@ export function AppSidebar() {
             <div className="px-2 py-1">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Balance</span>
-                <span className="font-medium">3 free today</span>
+                <span className="font-medium">
+                  {credits !== null ? `${credits} credits` : "..."}
+                </span>
               </div>
               <div className="mt-2">
                 <Button
