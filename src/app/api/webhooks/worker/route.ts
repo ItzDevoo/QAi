@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { testRuns, issues } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { testRuns, issues, aiSteps } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { refundCredits } from "@/lib/queries";
 
 export async function POST(req: Request) {
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { testRunId, status, issues: issueList, durationMs } = await req.json();
+  const { testRunId, status, issues: issueList, durationMs, screenshots } = await req.json();
 
   // Fetch the test run to get userId and mode for potential refund
   const testRun = await db.query.testRuns.findFirst({
@@ -60,6 +60,27 @@ export async function POST(req: Request) {
         })
       )
     );
+  }
+
+  // Store screenshots in ai_steps table
+  if (screenshots && screenshots.length > 0) {
+    for (const shot of screenshots as Array<{
+      stepNumber: number;
+      runNumber: number;
+      base64: string;
+      description: string;
+    }>) {
+      await db
+        .update(aiSteps)
+        .set({ screenshotBase64: shot.base64 })
+        .where(
+          and(
+            eq(aiSteps.testRunId, testRunId),
+            eq(aiSteps.runNumber, shot.runNumber),
+            eq(aiSteps.stepNumber, shot.stepNumber)
+          )
+        );
+    }
   }
 
   // Refund credits if the test failed

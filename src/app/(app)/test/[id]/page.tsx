@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import {
   Globe,
@@ -16,12 +16,15 @@ import {
   Accessibility,
   Gauge,
   Bot,
+  ThumbsDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePollTestRun } from "@/hooks/use-poll-test-run";
 import { LiveStepFeed } from "@/components/live-step-feed";
+import { ScreenshotTimeline } from "@/components/screenshot-timeline";
+import { CoverageSummary } from "@/components/coverage-summary";
 
 const categoryIcons: Record<string, React.ElementType> = {
   broken_link: Link2,
@@ -53,6 +56,42 @@ const confidenceColors: Record<string, string> = {
   low: "outline",
 };
 
+function DismissButton({
+  issueId,
+  onDismiss,
+}: {
+  issueId: string;
+  onDismiss: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleDismiss() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/issues/${issueId}/dismiss`, {
+        method: "POST",
+      });
+      if (res.ok) onDismiss();
+    } catch {
+      // Silently fail
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDismiss}
+      disabled={loading}
+      className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      title="Not a bug"
+    >
+      <ThumbsDown className="h-3 w-3" />
+      {loading ? "..." : "Not a bug"}
+    </button>
+  );
+}
+
 export default function TestReportPage({
   params,
 }: {
@@ -60,6 +99,7 @@ export default function TestReportPage({
 }) {
   const { id } = use(params);
   const { data, loading, error } = usePollTestRun(id);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   if (loading) {
     return (
@@ -86,8 +126,9 @@ export default function TestReportPage({
   const isFailed = data.status === "failed";
   const isComplete = data.status === "completed";
 
-  // Group issues by category
-  const issuesByCategory = data.issues.reduce(
+  // Group issues by category, excluding dismissed
+  const activeIssues = data.issues.filter((i) => !dismissedIds.has(i.id));
+  const issuesByCategory = activeIssues.reduce(
     (acc: Record<string, typeof data.issues>, issue) => {
       if (!acc[issue.category]) acc[issue.category] = [];
       acc[issue.category].push(issue);
@@ -95,6 +136,7 @@ export default function TestReportPage({
     },
     {}
   );
+  const activeIssueCount = data.issueCount - dismissedIds.size;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -110,7 +152,7 @@ export default function TestReportPage({
           <h1 className="text-2xl font-bold tracking-tight">Test Report</h1>
           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             <Globe className="h-4 w-4" />
-            <span className="truncate">{data.url}</span>
+            <span className="max-w-md truncate">{data.url}</span>
           </div>
         </div>
         {isRunning && (
@@ -125,7 +167,6 @@ export default function TestReportPage({
       {isRunning && (
         <Card>
           <CardContent className="py-8">
-            {/* Progress header */}
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -149,13 +190,11 @@ export default function TestReportPage({
               ) : null}
             </div>
 
-            {/* Checking description */}
             <p className="text-sm text-muted-foreground">
               Checking 404s, console errors, broken images, accessibility,
               performance, and running AI behavioral tests
             </p>
 
-            {/* Live step feed */}
             <LiveStepFeed testRunId={id} isRunning={true} />
           </CardContent>
         </Card>
@@ -174,8 +213,6 @@ export default function TestReportPage({
             <Button asChild className="mt-4">
               <Link href="/test/new">Try Again</Link>
             </Button>
-
-            {/* Show step history even on failure */}
             <div className="mt-6 w-full">
               <LiveStepFeed testRunId={id} isRunning={false} />
             </div>
@@ -192,19 +229,21 @@ export default function TestReportPage({
               <CardContent className="flex items-center gap-3 p-4">
                 <div
                   className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                    data.issueCount > 0 ? "bg-destructive/10" : "bg-green-500/10"
+                    activeIssueCount > 0
+                      ? "bg-destructive/10"
+                      : "bg-green-500/10"
                   }`}
                 >
-                  {data.issueCount > 0 ? (
+                  {activeIssueCount > 0 ? (
                     <AlertTriangle className="h-5 w-5 text-destructive" />
                   ) : (
                     <CheckCircle className="h-5 w-5 text-green-500" />
                   )}
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{data.issueCount}</p>
+                  <p className="text-2xl font-bold">{activeIssueCount}</p>
                   <p className="text-xs text-muted-foreground">
-                    {data.issueCount === 1 ? "Issue" : "Issues"} Found
+                    {activeIssueCount === 1 ? "Issue" : "Issues"} Found
                   </p>
                 </div>
               </CardContent>
@@ -243,8 +282,14 @@ export default function TestReportPage({
             </Card>
           </div>
 
+          {/* Screenshot timeline */}
+          <ScreenshotTimeline testRunId={id} />
+
+          {/* Coverage summary */}
+          <CoverageSummary testRunId={id} />
+
           {/* No issues */}
-          {data.issueCount === 0 && (
+          {activeIssueCount === 0 && (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <CheckCircle className="mb-4 h-10 w-10 text-green-500" />
@@ -297,19 +342,31 @@ export default function TestReportPage({
                           </p>
                         )}
                       </div>
-                      {issue.confidence && (
-                        <Badge
-                          variant={
-                            confidenceColors[issue.confidence] as
-                              | "destructive"
-                              | "secondary"
-                              | "outline"
-                          }
-                          className="shrink-0 text-xs"
-                        >
-                          {issue.confidence}
-                        </Badge>
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {issue.confidence && (
+                          <Badge
+                            variant={
+                              confidenceColors[issue.confidence] as
+                                | "destructive"
+                                | "secondary"
+                                | "outline"
+                            }
+                            className="text-xs"
+                          >
+                            {issue.confidence}
+                          </Badge>
+                        )}
+                        {category === "ai_detected" && (
+                          <DismissButton
+                            issueId={issue.id}
+                            onDismiss={() =>
+                              setDismissedIds((prev) =>
+                                new Set([...prev, issue.id])
+                              )
+                            }
+                          />
+                        )}
+                      </div>
                     </div>
                   ))}
                 </CardContent>
@@ -317,7 +374,7 @@ export default function TestReportPage({
             );
           })}
 
-          {/* AI step history (collapsed) */}
+          {/* AI step history */}
           <details className="group">
             <summary className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
               <Bot className="h-4 w-4" />

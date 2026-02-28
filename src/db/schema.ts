@@ -87,6 +87,7 @@ export const issues = pgTable("issues", {
   selector: text("selector"),
   context: text("context"),
   confidence: text("confidence"),
+  dismissed: boolean("dismissed").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
