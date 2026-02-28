@@ -15,11 +15,13 @@ import {
   ImageOff,
   Accessibility,
   Gauge,
+  Bot,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePollTestRun } from "@/hooks/use-poll-test-run";
+import { LiveStepFeed } from "@/components/live-step-feed";
 
 const categoryIcons: Record<string, React.ElementType> = {
   broken_link: Link2,
@@ -27,6 +29,7 @@ const categoryIcons: Record<string, React.ElementType> = {
   broken_image: ImageOff,
   accessibility: Accessibility,
   performance: Gauge,
+  ai_detected: Bot,
 };
 
 const categoryLabels: Record<string, string> = {
@@ -35,12 +38,19 @@ const categoryLabels: Record<string, string> = {
   broken_image: "Broken Images",
   accessibility: "Accessibility",
   performance: "Performance",
+  ai_detected: "AI Detected",
 };
 
 const severityColors: Record<string, string> = {
   error: "destructive",
   warning: "secondary",
   info: "outline",
+};
+
+const confidenceColors: Record<string, string> = {
+  high: "destructive",
+  medium: "secondary",
+  low: "outline",
 };
 
 export default function TestReportPage({
@@ -111,20 +121,42 @@ export default function TestReportPage({
         )}
       </div>
 
-      {/* Running state */}
+      {/* Running state — Live Test View */}
       {isRunning && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
-            <p className="text-lg font-medium">
-              {data.status === "queued"
-                ? "Waiting for worker..."
-                : "Running checks..."}
+          <CardContent className="py-8">
+            {/* Progress header */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <div>
+                  <p className="font-medium">
+                    {data.currentRunNumber
+                      ? `AI Run ${data.currentRunNumber} of ${data.mode === "fast" ? 1 : 3}`
+                      : "Running deterministic checks..."}
+                  </p>
+                  {data.lastStepDescription && (
+                    <p className="text-sm text-muted-foreground">
+                      {data.lastStepDescription}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {data.totalSteps ? (
+                <span className="text-sm text-muted-foreground">
+                  {data.totalSteps} steps
+                </span>
+              ) : null}
+            </div>
+
+            {/* Checking description */}
+            <p className="text-sm text-muted-foreground">
+              Checking 404s, console errors, broken images, accessibility,
+              performance, and running AI behavioral tests
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Checking 404s, console errors, broken images, accessibility, and
-              performance
-            </p>
+
+            {/* Live step feed */}
+            <LiveStepFeed testRunId={id} isRunning={true} />
           </CardContent>
         </Card>
       )}
@@ -142,6 +174,11 @@ export default function TestReportPage({
             <Button asChild className="mt-4">
               <Link href="/test/new">Try Again</Link>
             </Button>
+
+            {/* Show step history even on failure */}
+            <div className="mt-6 w-full">
+              <LiveStepFeed testRunId={id} isRunning={false} />
+            </div>
           </CardContent>
         </Card>
       )}
@@ -213,7 +250,7 @@ export default function TestReportPage({
                 <CheckCircle className="mb-4 h-10 w-10 text-green-500" />
                 <p className="text-lg font-medium">All Checks Passed</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  No issues found during deterministic checks
+                  No issues found during deterministic and AI checks
                 </p>
               </CardContent>
             </Card>
@@ -252,7 +289,7 @@ export default function TestReportPage({
                       >
                         {issue.severity}
                       </Badge>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm">{issue.message}</p>
                         {issue.context && (
                           <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -260,6 +297,19 @@ export default function TestReportPage({
                           </p>
                         )}
                       </div>
+                      {issue.confidence && (
+                        <Badge
+                          variant={
+                            confidenceColors[issue.confidence] as
+                              | "destructive"
+                              | "secondary"
+                              | "outline"
+                          }
+                          className="shrink-0 text-xs"
+                        >
+                          {issue.confidence}
+                        </Badge>
+                      )}
                     </div>
                   ))}
                 </CardContent>
@@ -267,10 +317,22 @@ export default function TestReportPage({
             );
           })}
 
+          {/* AI step history (collapsed) */}
+          <details className="group">
+            <summary className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <Bot className="h-4 w-4" />
+              View AI test steps
+            </summary>
+            <div className="mt-2">
+              <LiveStepFeed testRunId={id} isRunning={false} />
+            </div>
+          </details>
+
           {/* Disclaimer */}
           <p className="text-center text-xs text-muted-foreground">
-            QAi tests UI, links, images, accessibility, and performance. It does
-            not test auth logic, databases, or payment flows.
+            QAi tests UI, links, images, accessibility, performance, and
+            behavioral flows. It does not test auth logic, databases, or payment
+            flows.
           </p>
         </>
       )}

@@ -30,6 +30,14 @@ export const issueCategoryEnum = pgEnum("issue_category", [
   "broken_image",
   "accessibility",
   "performance",
+  "ai_detected",
+]);
+
+export const aiStepStatusEnum = pgEnum("ai_step_status", [
+  "pending",
+  "executing",
+  "completed",
+  "failed",
 ]);
 
 export const users = pgTable("users", {
@@ -51,6 +59,9 @@ export const testRuns = pgTable("test_runs", {
   mobileViewport: boolean("mobile_viewport").default(false).notNull(),
   issueCount: integer("issue_count").default(0),
   durationMs: integer("duration_ms"),
+  currentRunNumber: integer("current_run_number").default(0),
+  totalSteps: integer("total_steps").default(0),
+  lastStepDescription: text("last_step_description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
@@ -75,6 +86,24 @@ export const issues = pgTable("issues", {
   message: text("message").notNull(),
   selector: text("selector"),
   context: text("context"),
+  confidence: text("confidence"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const aiSteps = pgTable("ai_steps", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  testRunId: uuid("test_run_id")
+    .references(() => testRuns.id, { onDelete: "cascade" })
+    .notNull(),
+  runNumber: integer("run_number").default(1).notNull(),
+  stepNumber: integer("step_number").notNull(),
+  action: text("action").notNull(),
+  description: text("description").notNull(),
+  selector: text("selector"),
+  inputValue: text("input_value"),
+  screenshotBase64: text("screenshot_base64"),
+  aiReasoning: text("ai_reasoning"),
+  status: aiStepStatusEnum("status").default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -87,6 +116,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 export const testRunsRelations = relations(testRuns, ({ one, many }) => ({
   user: one(users, { fields: [testRuns.userId], references: [users.id] }),
   issues: many(issues),
+  aiSteps: many(aiSteps),
 }));
 
 export const creditsRelations = relations(credits, ({ one }) => ({
@@ -96,6 +126,13 @@ export const creditsRelations = relations(credits, ({ one }) => ({
 export const issuesRelations = relations(issues, ({ one }) => ({
   testRun: one(testRuns, {
     fields: [issues.testRunId],
+    references: [testRuns.id],
+  }),
+}));
+
+export const aiStepsRelations = relations(aiSteps, ({ one }) => ({
+  testRun: one(testRuns, {
+    fields: [aiSteps.testRunId],
     references: [testRuns.id],
   }),
 }));

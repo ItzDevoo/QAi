@@ -42,6 +42,7 @@ export async function POST(req: Request) {
           message: string;
           selector?: string;
           context?: string;
+          confidence?: string;
         }) => ({
           testRunId,
           category: issue.category as
@@ -49,11 +50,13 @@ export async function POST(req: Request) {
             | "console_error"
             | "broken_image"
             | "accessibility"
-            | "performance",
+            | "performance"
+            | "ai_detected",
           severity: issue.severity as "error" | "warning" | "info",
           message: issue.message,
           selector: issue.selector ?? null,
           context: issue.context ?? null,
+          confidence: issue.confidence ?? null,
         })
       )
     );

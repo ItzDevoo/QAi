@@ -9,6 +9,7 @@ interface Issue {
   message: string;
   selector: string | null;
   context: string | null;
+  confidence: string | null;
 }
 
 interface TestRunData {
@@ -19,6 +20,9 @@ interface TestRunData {
   mobileViewport: boolean;
   issueCount: number;
   durationMs: number | null;
+  currentRunNumber: number | null;
+  totalSteps: number | null;
+  lastStepDescription: string | null;
   createdAt: string;
   completedAt: string | null;
   issues: Issue[];
@@ -55,7 +59,9 @@ export function usePollTestRun(testRunId: string) {
     const startPolling = async () => {
       const shouldContinue = await poll();
       if (active && shouldContinue) {
-        setTimeout(startPolling, 2500);
+        // Poll faster during running (AI steps), slower when queued
+        const interval = 1500;
+        setTimeout(startPolling, interval);
       }
     };
 
